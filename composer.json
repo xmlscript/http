@@ -1,19 +1,19 @@
 {
-  "name": "xmlscript/http",
-  "description": "http",
-  "license": "MIT",
-  "authors": [
-    {
-        "name": "xmlscript",
-        "email": "xmlscript@gmail.com"
+    "name": "xmlscript/http",
+    "description": "http",
+    "license": "MIT",
+    "authors": [
+      {
+          "name": "xmlscript",
+          "email": "xmlscript@gmail.com"
+      }
+    ],
+    "require": {
+      "php": ">=7.1"
+    },
+    "autoload": {
+      "psr-4": {
+        "http\\": ""
+      }
     }
-  ],
-  "require": {
-    "php": ">=7.1"
-  },
-  "autoload": {
-    "psr-4": {
-      "http\\": ""
-    }
-  }
 }
