@@ -14,16 +14,19 @@ class request{
 
 
   final function __construct(string $url){
+
+
+
+
+
     curl_setopt_array(
-      $this->handle=curl_init(self::normalize($url)),
-      [
-      CURLOPT_AUTOREFERER=>true,
+      $this->handle=curl_init(self::normalize($url)), [
+      //CURLOPT_AUTOREFERER=>true,
       CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,
       CURLOPT_FOLLOWLOCATION=>true,
       CURLINFO_HEADER_OUT=>true,
       CURLOPT_CONNECTTIMEOUT=>6,
-    ]
-    );
+    ]);
   }
 
 
