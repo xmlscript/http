@@ -7,7 +7,6 @@ class request{
   private const CURL_SETOPT_ARRAY = [
       CURLOPT_AUTOREFERER=>true,
       CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,
-      CURLOPT_SAFE_UPLOAD=>true,
       CURLOPT_FOLLOWLOCATION=>true,
       CURLINFO_HEADER_OUT=>true,
       CURLOPT_CONNECTTIMEOUT=>6,
@@ -257,8 +256,9 @@ class request{
       $_SERVER['REQUEST_SCHEME'],
       $_SERVER['REQUEST_HOST'],
       $_SERVER['REQUEST_PORT'],
-      $_SERVER['REQUEST_URI']
-    ))
+      $_SERVER['REQUEST_URI'],
+      $_SERVER['SERVER_PORT']
+    ) || PHP_SAPI ==='cli')
       return $url;
 
     $arr = parse_url($url);
