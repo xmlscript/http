@@ -6,7 +6,7 @@ class request{
 
   private const CURL_SETOPT_ARRAY = [
       CURLOPT_AUTOREFERER=>true,
-      CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,
+      //CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
       CURLOPT_FOLLOWLOCATION=>true,
       CURLINFO_HEADER_OUT=>true,
       CURLOPT_CONNECTTIMEOUT=>6,
@@ -14,19 +14,10 @@ class request{
 
 
   final function __construct(string $url){
-
-
-
-
-
     curl_setopt_array(
-      $this->handle=curl_init(self::normalize($url)), [
-      //CURLOPT_AUTOREFERER=>true,
-      CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,
-      CURLOPT_FOLLOWLOCATION=>true,
-      CURLINFO_HEADER_OUT=>true,
-      CURLOPT_CONNECTTIMEOUT=>6,
-    ]);
+      $this->handle=curl_init(self::normalize($url)),
+      self::CURL_SETOPT_ARRAY
+    );
   }
 
 
