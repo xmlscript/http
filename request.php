@@ -207,7 +207,7 @@ class request{
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POST=>true,
       CURLOPT_POSTFIELDS=>$body,
-    ])->response();
+    ])->header('Content-Length',strlen($body))->response();
   }
 
 
@@ -215,9 +215,8 @@ class request{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POST=>true,
-      CURLOPT_HTTPHEADER=>['Content-Length: '.strlen($body)],
       CURLOPT_POSTFIELDS=>$body,
-    ])->response();
+    ])->header('Content-Length',strlen($body))->response();
   }
 
 
@@ -225,7 +224,7 @@ class request{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
-    ])->response();
+    ])->header('Content-Length',strlen($body))->response();
   }
 
 
@@ -233,7 +232,7 @@ class request{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
-    ])->response();
+    ])->header('Content-Length',strlen($body))->response();
   }
 
 
