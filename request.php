@@ -83,6 +83,11 @@ class request{
   }
 
 
+  final function __toString():string{
+    return curl_getinfo($this->handle,CURLINFO_EFFECTIVE_URL);
+  }
+
+
   final function query(array $q):self{
     return $this->setopt(CURLOPT_URL, strstr(curl_getinfo($this->handle,CURLINFO_EFFECTIVE_URL).'?','?',true).'?'.http_build_query($q,'','&',PHP_QUERY_RFC3986));
   }
