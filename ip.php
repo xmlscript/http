@@ -10,26 +10,19 @@ class ip{
 
 
   /**
-   * 返回不信任ip
+   * 生成一个代理信任链，第一条绝对可信
    */
-  private function REMOTE_ADDR():?string{
-    return isset($_SERVER[__FUNCTION__])&&
-      filter_var($_SERVER[__FUNCTION__], FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE)&&//合法IP
-    array_search($_SERVER[__FUNCTION__],$this->trust)===false//不在信任列表里
-                ?$_SERVER[__FUNCTION__]:null;
-  }
-
-
-  private function HTTP_X_FORWARDED_FOR():?string{
-    return filter_var($x=explode(', ',$_SERVER['HTTP_X_FORWARDED_FOR']??null)[0], FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE)?$x:null;
+  function __debugInfo():array{
+    return [-1=>$_SERVER['REMOTE_ADDR']??'']+array_reverse(explode(', ', $_SERVER['HTTP_X_FORWARDED_FOR']??''));
   }
 
 
   function __toString():string{
-    return $this->REMOTE_ADDR()??//合法的不信任ip
-           $this->HTTP_X_FORWARDED_FOR()??//既然信任，就无条件信任到底，返回第一条ip
-           $_SERVER['REMOTE_ADDR']??//被辜负了信任之后
-           '';//彻底失信
+    foreach($this->__debugInfo() as $ip)
+      if(filter_var($ip, FILTER_VALIDATE_IP,FILTER_FLAG_NO_RES_RANGE)&&array_search($ip,$this->trust)!==false)
+        continue;
+      return $ip;
+    return $ip;
   }
 
 }
