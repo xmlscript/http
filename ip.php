@@ -18,10 +18,11 @@ class ip{
 
 
   function __toString():string{
-    foreach($this->__debugInfo() as $ip)
+    foreach($this->__debugInfo() as $ip){
       if(filter_var($ip, FILTER_VALIDATE_IP,FILTER_FLAG_NO_RES_RANGE)&&array_search($ip,$this->trust)!==false)
         continue;
-      return $ip;
+      else
+        return $ip;
     return $ip;
   }
 
