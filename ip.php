@@ -27,7 +27,7 @@ class ip{
 
   function __toString():string{
     return $this->REMOTE_ADDR()??//合法的不信任ip
-           $this->X_FORWARDED_FOR()??//既然信任，就无条件信任到底，返回第一条ip
+           $this->HTTP_X_FORWARDED_FOR()??//既然信任，就无条件信任到底，返回第一条ip
            $_SERVER['REMOTE_ADDR']??//被辜负了信任之后
            '';//彻底失信
   }
