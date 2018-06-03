@@ -21,7 +21,7 @@ class ip{
 
 
   private function HTTP_X_FORWARDED_FOR():?string{
-    return filter_var(explode(', ',$_SERVER['HTTP_X_FORWARDED_FOR']??null)[0], FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE)?$_SERVER[__FUNCTION__]:null;
+    return filter_var($x=explode(', ',$_SERVER['HTTP_X_FORWARDED_FOR']??null)[0], FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE)?$x:null;
   }
 
 
