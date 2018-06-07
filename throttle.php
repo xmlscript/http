@@ -1,112 +1,76 @@
 <?php namespace http; // vim: se fdm=marker:
 
-abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
+abstract class throttle extends \Exception{
 
-  protected const COUNTER = 'count';//这个字段持久化计数器++
-  protected const FREEZE = 'freeze';//这个字段持久化冻结时间戳，设置时一定时在当前时间+N秒的未来时间
+  protected const KEY = 'sdklfj';
 
-  protected const LIMIT = 'limit';//这个源自适配器传入的私有变量
+  protected $uniq;//FIXME 要纯粹的数据模型对象，不要private变量
+  protected $key;
 
-  protected $uri;
-
-  private static $adapter;//可以省去连接持久层的开销，避免反复new和connect
+  protected static $adapter;//可以省去连接持久层的开销，避免反复new和connect
 
   const ALGO_LEAKY_BUCKET = 0;
   const ALGO_TIME_WINDOW = 1;
 
+  public $hit=0;//当前分段计数器
+  public $remaining=0;//剩余次数
+  public $retry;//FIXME 怎么做成$Retry-After
+
+  abstract function __get(string $key):?float;
+  abstract function __set(string $key, float $value):void;
 
   /**
    * @param string $uri unique字段
-   * @param int $n
+   * @param int $limit
    * @param int $sec
    * @param int $algo 目前支持两种算法：分段限次，超次罚时
    */
-  final function __construct(string $uri, int $n, int $sec, int $algo){
-    $this->uri = $uri;
-    header("X-RateLimit-limit: $n");//指定时间内最大请求次数
-    header('X-RateLimit-Remaining: '.$this['remaining']);//指定时间内剩余请求次数
+  final function __construct(string $uri, int $limit, int $sec, int $algo){#{{{
+    $this->uniq = $uri;
 
+    $limit=abs($limit);
 
-    /*
-     * 三种属性：
-     *   1、持久化
-     *     - 总计数器，可能用于log，构造时必须++
-     *     - FREEZE = `现在 + 秒数`
-     *   2、外部传参
-     *     - 分段限次，无论成败都将输出header
-     *     - $sec 各种算法计算条件的基础参数，可能是惩罚N秒，也可能是分段限时
-     *   3、计算得到
-     *     - 分段计数器 = `总计数器 % 分段限次`
-     *     - 剩余次数 = `总计数器 % 分段限次 ^ 分段限次`，无论成败都将输出header
-     *     - 剩余秒数 = `max(0,FREEZE-现在)`，仅失败时输出Try-After
-     * 上述各种数值，都必须随时get
+    /**
+     * 种种迹象表明，时间戳放在小数位非常容易处理，10个字符长度，time*10**10就可以还原，也可用用time()/10**10来比较
+     * 但是谨防尾数为0时，被忽略的问题
+     * 计数器在整数位，方便++
      */
-    $this[self::COUNTER] += 1;//无条件++
 
-    switch($algo){
-      case self::ALGO_TIME_WINDOW:
-        break;
+    if($this->retry = max(0,str_pad(ltrim(strstr($this->{self::KEY},'.'),'.'),10,0)-time())){//TODO 把小数位拿出来比较
 
-      case self::ALGO_LEAKY_BUCKET:
-      default:
-        $this->retry() or
-        $this[self::FREEZE] = time() + ($this[self::COUNTER]%$n?0:$sec);
-        break;
+      header('Retry-After: '.$this->retry, parent::__construct('Too Many Requests', 429), $this->code);
+
+      throw $this;
+
+    }else{
+
+      header('X-RateLimit-limit: '.$limit);
+      header('X-RateLimit-Remaining: '.$this->remaining=$limit-(int)$this->hit=($this->{self::KEY}++%$limit)+1);
+
+      switch($algo){
+        case self::ALGO_TIME_WINDOW:
+          break;
+
+        case self::ALGO_LEAKY_BUCKET:
+        default:
+
+          $this->remaining or $this->{self::KEY} = (float)((int)$this->{self::KEY}.'.'.(time()+$sec));
+          break;
+      }
+
     }
 
-  }
+  }#}}}
 
 
-  /**
-   * TODO 所有属性东一个西一个，不整齐，想办法统一暴露出来
-   */
-  private function retry():int{
-    return max(0,$this[self::FREEZE]-time());
-  }
-
-
-  /**
-   * 如果不是立即执行对象，则会贻误catch
-   */
-  final function __destruct(){
-    if($retry=$this->retry()){
-      header("Retry-After: $retry");
-      parent::__construct('Too Many Request',429);
-      throw $this;//注意！对象被转移到catch里了，仍然可以获取各项属性
-    }
-  }
-
-
-  /**
-   * 不是返回属性总数，而是返回实时计算的剩余时间？？？不合理就算了
-   */
-  final function count():int{
-    return $this[self::COUNTER];
-  }
-
-
-
-  /**
-   * 服务端为每个用户都临时持久化一套记录，无论是那种算法，都应该超时删除，减少用量，时之对应当时的访问量
-   * @return 临时适配器，仅仅是为了下标路由到具体的throttle对象
-   */
-  final static function sess():\ArrayAccess{
+  final static function sess():\ArrayAccess{#{{{
     return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class implements \ArrayAccess, \Countable{
 
-      private $n = 5; //0是不限次数随便请求
-      private $sec = 10; //0是不限时间随便请求
+      private $n = 5;
+      private $sec = 10;
       private $algo = throttle::ALGO_LEAKY_BUCKET;
 
-      /**
-       * 合并两个算法
-       * 时段内次数耗尽再冻结，无条件++，冻结到本时段结束
-       * 次数耗尽再冻结，仅错误时++，冻结到N秒之后
-       *
-       * @param int $n 允许在单位时间内发起多少次请求数量
-       * @param int $sec 时间窗口，从首次请求时间开始算起
-       */
       function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
-        //FIXME 此时更改参数，能否自动同步在self::$adapter里面？？？？
         $this->n = $n;
         $this->sec = $sec;
         $this->algo = $algo;
@@ -115,54 +79,43 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
 
 
       function __construct(){
-        //不确定之前有没有开启
-        //不知道之后要不要关闭
         session_start();
       }
 
-      /**
-       * 一共记录了多少uri的规则，每个用户的规则各不相同，需要分别存储，并立即设置过期时间
-       */
       function count(){
         return count($_SESSION[self::class]);
       }
 
-      /**
-       * sess的过期时间取决于session生命时长设置，redis/memcached/mongo自带过期，而其他持久层无法自动过期，不要支持吧
-       */
       function offsetExists($uri){
         return isset($_SESSION[self::class][$uri]);
       }
 
 
-      function offsetGet($uri):throttle{//第二次匿名对象是初始化对应的key
-        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{#{{{
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
 
-          function offsetExists($offset):bool{
-            return isset($_SESSION[self::class][$this->uri][$offset]);
+          function __isset(string $key):bool{
+            return isset($_SESSION[self::class][$this->uniq][self::KEY]);
           }
 
-          function offsetGet($offset){
-            return $_SESSION[self::class][$this->uri][$offset]??null;
+          function __get(string $key):?float{
+            return $_SESSION[self::class][$this->uniq][self::KEY]??null;
           }
 
-          function offsetSet($offset,$value):void{
-            $_SESSION[self::class][$this->uri][$offset] = (int)$value;
+          function __set(string $key, float $value):void{
+            strcasecmp(self::KEY,$key) or $_SESSION[self::class][$this->uniq][self::KEY] = $value;
           }
 
-          function offsetUnset($offset):void{
-            unset($_SESSION[self::class][$this->uri][$offset]);
+          function __unset(string $key){
+            unset($_SESSION[self::class][$this->uniq][self::KEY]);
           }
 
-        };//}}}
+        };
       }
 
 
-      /**
-       * throttle对象在set时，依赖这个方法提供的适配
-       */
       function offsetSet($uri, $value){
-        //FIXME 要求必须传入一个可被解析的throttle对象，否则没有意义
+        $_SESSION[self::class][$uri] = $value;
       }
 
 
@@ -171,27 +124,65 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
       }
 
     };
-  }
+  }#}}}
 
 
-  /**
-   * 可以利用自动过期特性
-   */
-  static function redis(string $host='127.0.0.1', int $port=6379):\ArrayAccess{
-    return new class($host, $port) implements \ArrayAccess{
+  static function redis(string $host='127.0.0.1', int $port=6379, string $password=''):\ArrayAccess{#{{{
+    return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class($host, $port, $password) implements \ArrayAccess{
 
-      function __construct(string $host, int $port){
+      public $redis;
 
+      private $n = 5;
+      private $sec = 10;
+      private $algo = throttle::ALGO_LEAKY_BUCKET;
+
+
+      function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
+        $this->n = $n;
+        $this->sec = $sec;
+        $this->algo = $algo;
+        return $this;
+      }
+
+      function __construct(string $host, int $port, string $password=''){
+        $this->redis = new \Redis;
+        @$this->redis->connect($host,$port) and $this->redis->auth($password);
+      }
+
+      function count():int{
+        return $this->redis->dbSize();
       }
 
       function offsetExists($uri){
 
       }
 
-      function offsetGet($uri):\ArrayAccess{
-        return new class($uri) extends \Exception implements \ArrayAccess{#{{{
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
 
-        };#}}}
+          private function k():string{
+            return md5($this->uniq.self::KEY.new ip,1);//FIXME 并不是所有数据库都支持这样的key字段！！！
+          }
+
+          function __isset(string $key):bool{
+            return strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->exists($this->k());
+          }
+
+          function __unset(string $key):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->delete($this->k());
+          }
+
+          function __get(string $key):?float{
+            //FIXME 考虑用select方法选择一个专用数据库
+            //FIXME 其实sess使用了一个隐藏参数cookie，这里只能用ip代替，但是ip并不可信，可能误伤！！！
+            return self::$adapter['redis']->redis->get($this->k())?:null;
+          }
+
+          function __set(string $key, float $value):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->setex($this->k(), 300, $value);
+          }
+
+        };
       }
 
       function offsetSet($uri, $value){
@@ -203,27 +194,74 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
       }
 
     };
-  }
+  }#}}}
 
 
-  /**
-   * 可以利用自动过期特性
-   */
-  static function memcached(string $host='127.0.0.1', int $port=6379):\ArrayAccess{
-    return new class($host, $port) implements \ArrayAccess{
+  static function memcache(string $host='127.0.0.1', int $port=11211):\ArrayAccess{#{{{
+    return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class($host, $port) implements \ArrayAccess{
 
+      public $memcache;
+
+      private $n = 5;
+      private $sec = 10;
+      private $algo = throttle::ALGO_LEAKY_BUCKET;
+
+      function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
+        $this->n = $n;
+        $this->sec = $sec;
+        $this->algo = $algo;
+        return $this;
+      }
+
+      /**
+       * @param string $host
+       * @param int $port 当使用unix://path/to/memcached.sock来使用unix或socket时，port必须是0
+       * @param int $timeout=1 文档说修改默认值要三思，时间太久将失去缓存意义
+       */
       function __construct(string $host, int $port){
+        $this->memcache = new \Memcache;//可以使用类，也可以使用函数，但是函数的文档都指向了类方法。。。
+        $this->memcache->addServer($host,$port);
+      }
 
+      function __destruct(){
+        $this->memcache->quit();
+      }
+
+      function count():int{
+        return $this->memcached->getStats()['total_items'];
       }
 
       function offsetExists($uri){
 
       }
 
-      function offsetGet($uri):\ArrayAccess{
-        return new class($uri) extends \Exception implements \ArrayAccess{#{{{
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
 
-        };#}}}
+
+          private function k():string{
+            return md5($this->uniq.self::KEY.new ip,1);//FIXME 并不是所有数据库都支持这样的key字段！！！
+          }
+
+          function __isset(string $key):bool{
+            return strcasecmp(self::KEY,$key) or self::$adapter['memcache']->memcache->get($this->k())!==false;
+          }
+
+          function __unset(string $key):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['memcache']->memcache->delete($this->k());
+          }
+
+          function __get(string $key):?float{
+            //FIXME 其实sess使用了一个隐藏参数cookie，这里只能用ip代替，但是ip并不可信，可能误伤！！！
+            //FIXME 其他客户端意外或刻意存入了非法值？？？
+            return self::$adapter['memcache']->memcache->get($this->k())?:null;
+          }
+
+          function __set(string $key, float $value):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['memcache']->memcache->set($this->k(), $value, 0, 300);
+          }
+
+        };
       }
 
       function offsetSet($uri, $value){
@@ -235,24 +273,67 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
       }
 
     };
-  }
+  }#}}}
 
 
-  static function mongo(\MongoDB\Collection $collection):self{
-    return new class($host, $port) implements \ArrayAccess{
+  static function memcached(string $host='127.0.0.1', int $port=11211, int $timeout=1):\ArrayAccess{#{{{
+    return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class($host, $port, $timeout) implements \ArrayAccess{
 
-      function __construct(string $host, int $port){
+      public $memcached;
 
+      private $n = 5;
+      private $sec = 10;
+      private $algo = throttle::ALGO_LEAKY_BUCKET;
+
+      function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
+        $this->n = $n;
+        $this->sec = $sec;
+        $this->algo = $algo;
+        return $this;
+      }
+
+      function __construct(string $host, int $port, int $timeout){
+        $this->memcached = new \Memcached('persistent_id');
+        $this->memcached->addServer($host,$port,0);//FIXME 允许添加多个服务器，而且可以单独设置权重
+      }
+
+      function __destruct(){
+        $this->memcached->quit();
+      }
+
+      function count():int{
+        return $this->memcached->getStats()['total_items'];
       }
 
       function offsetExists($uri){
 
       }
 
-      function offsetGet($uri):\ArrayAccess{
-        return new class($uri) extends \Exception implements \ArrayAccess{#{{{
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
 
-        };#}}}
+          private function k():string{
+            return md5($this->uniq.self::KEY.new ip,0);//FIXME 不支持怪异的字符
+          }
+
+          function __isset(string $key):bool{
+            return strcasecmp(self::KEY,$key) or self::$adapter['memcached']->memcached->exists($this->k());
+          }
+
+          function __unset(string $key):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['memcached']->memcached->delete($this->k());
+          }
+
+          function __get(string $key):?float{
+            //FIXME 其实sess使用了一个隐藏参数cookie，这里只能用ip代替，但是ip并不可信，可能误伤！！！
+            return self::$adapter['memcached']->memcached->get($this->k())?:null;
+          }
+
+          function __set(string $key, float $value):void{
+            strcasecmp(self::KEY,$key) or self::$adapter['memcached']->memcached->set($this->k(), $value, 300);
+          }
+
+        };
       }
 
       function offsetSet($uri, $value){
@@ -264,7 +345,141 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
       }
 
     };
-  }
+  }#}}}
+
+
+  static function mongo(string $host='127.0.0.1', int $port=27017):\ArrayAccess{#{{{
+    return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class($host, $port) implements \ArrayAccess{
+
+      public $redis;
+
+      private $n = 5;
+      private $sec = 10;
+      private $algo = throttle::ALGO_LEAKY_BUCKET;
+
+      function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
+        $this->n = $n;
+        $this->sec = $sec;
+        $this->algo = $algo;
+        return $this;
+      }
+
+      /**
+       * 比较复杂，还有分片配置，不如直接传入Collection方便
+       */
+      function __construct(string $host, int $port, string $password=''){
+        $this->mongo = new \MongoDB\Client("mongodb://$host:$port");
+      }
+
+      function count():int{
+        //return $this->redis->dbSize();
+      }
+
+      function offsetExists($uri){
+
+      }
+
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
+
+          private function k():string{
+            return md5($this->uniq.self::KEY.new ip,1);//FIXME 并不是所有数据库都支持这样的key字段！！！
+          }
+
+          function __isset(string $key):bool{
+            //return strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->exists($this->k());
+          }
+
+          function __unset(string $key):void{
+            //strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->delete($this->k());
+          }
+
+          function __get(string $key):?float{
+            //FIXME 其实sess使用了一个隐藏参数cookie，这里只能用ip代替，但是ip并不可信，可能误伤！！！
+            //return self::$adapter['redis']->redis->get($this->k())?:null;
+          }
+
+          function __set(string $key, float $value):void{
+            //strcasecmp(self::KEY,$key) or self::$adapter['redis']->redis->setex($this->k(), 300, $value);
+          }
+
+        };
+      }
+
+      function offsetSet($uri, $value){
+
+      }
+
+      function offsetUnset($uri){
+
+      }
+
+    };
+  }#}}}
+
+
+  static function apcu():\ArrayAccess{#{{{
+    return self::$adapter[__FUNCTION__]??self::$adapter[__FUNCTION__]=new class implements \ArrayAccess{
+
+      private $n = 5;
+      private $sec = 10;
+      private $algo = throttle::ALGO_LEAKY_BUCKET;
+
+      function __invoke(int $n, int $sec, int $algo=throttle::ALGO_LEAKY_BUCKET):self{
+        $this->n = $n;
+        $this->sec = $sec;
+        $this->algo = $algo;
+        return $this;
+      }
+
+      function count():int{
+        //return $this->redis->dbSize();
+      }
+
+      function offsetExists($uri){
+
+      }
+
+      function offsetGet($uri):throttle{
+        return new class($uri, $this->n, $this->sec, $this->algo) extends throttle{
+
+          private function k():string{
+            return md5($this->uniq.self::KEY.new ip,1);//FIXME 并不是所有数据库都支持这样的key字段！！！
+          }
+
+          function __isset(string $key):bool{
+            return strcasecmp(self::KEY,$key) or apcu_exists($this->k());
+          }
+
+          function __unset(string $key):void{
+            strcasecmp(self::KEY,$key) or apcu_delete($this->k());
+          }
+
+          function __get(string $key):?float{
+            //FIXME 其实sess使用了一个隐藏参数cookie，这里只能用ip代替，但是ip并不可信，可能误伤！！！
+            return apcu_fetch($this->k())?:null;
+          }
+
+          function __set(string $key, float $value):void{
+            //strcasecmp(self::KEY,$key) or apcu_add($this->k(), $value, 3000);
+            strcasecmp(self::KEY,$key) or apcu_store($this->k(), $value, 3000);
+          }
+
+        };
+      }
+
+      function offsetSet($uri, $value){
+
+      }
+
+      function offsetUnset($uri){
+
+      }
+
+    };
+  }#}}}
+
+
 
 
   /**
@@ -310,31 +525,6 @@ abstract class throttle extends \Exception implements \ArrayAccess, \Countable{
       function __construct(string $host, int $port){
 
       }
-
-      function offsetExists($uri){
-
-      }
-
-      function offsetGet($uri):\ArrayAccess{
-        return new class($uri) extends \Exception implements \ArrayAccess{#{{{
-
-        };#}}}
-      }
-
-      function offsetSet($uri, $value){
-
-      }
-
-      function offsetUnset($uri){
-
-      }
-
-    };
-  }
-
-
-  static function apcu():self{
-    return new class implements \ArrayAccess{
 
       function offsetExists($uri){
 
