@@ -21,14 +21,11 @@ abstract class throttle extends \Exception{
 
     [$this->{'X-RateLimit-Limit'},$this->{'X-RateLimit-Reset'}] = [$limit,(int)round(($this->ttl()?:$ttl)+microtime(1))];
 
-    //session_destroy();
-    var_dump(end($_SESSION));
-
     if(($this->hit=$this->get())>=$limit){
 
       parent::__construct('Too Many Requests',429);
 
-      //FIXME 时不时对Remaining有什么误解？其他库使用 max(0,limit-hit)
+      //FIXME 是不是对Remaining有什么误解？其他库使用 max(0,limit-hit)
       [$this->{'X-RateLimit-Remaining'},$this->{'Retry-After'}] = [0,$this->{'X-RateLimit-Reset'}-time()];
 
       headers_sent() or header('X-RateLimit-Reset: '.$this->{'X-RateLimit-Reset'},header('X-RateLimit-Remaining: '.$this->{'X-RateLimit-Remaining'},header('X-RateLimit-limit: '.$limit,header('Retry-After: '.date(DATE_RFC7231,$this->{'X-RateLimit-Reset'})))),$this->code);
