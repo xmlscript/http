@@ -4,35 +4,31 @@ class request{
 
   private $handle, $header=[];
 
-  private const CURL_SETOPT_ARRAY = [
-      CURLOPT_AUTOREFERER=>true,
-      //CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
-      CURLOPT_FOLLOWLOCATION=>true,
-      CURLINFO_HEADER_OUT=>true,
-      CURLOPT_CONNECTTIMEOUT=>6,
-    ];
+  final function __construct(string $url, array $query=[]){
 
-
-  final function __construct(string $url){
     curl_setopt_array(
       $this->handle=curl_init(self::normalize($url)),
-      self::CURL_SETOPT_ARRAY
+      [
+        CURLOPT_AUTOREFERER=>true,
+        //CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
+        CURLOPT_FOLLOWLOCATION=>true,
+        CURLINFO_HEADER_OUT=>true,
+        CURLOPT_CONNECTTIMEOUT=>6,
+      ]
     );
+
+    //FIXME 合并设置；effective_url？两处都设置，如何共存？覆盖？
+    curl_setopt(
+      $this->handle,
+      CURLOPT_URL,
+      strstr(curl_getinfo($this->handle,CURLINFO_EFFECTIVE_URL).'?','?',true).'?'.http_build_query($query,'','&',PHP_QUERY_RFC3986)
+    );
+
   }
 
 
   final function __destruct(){
     curl_close($this->handle);
-  }
-
-
-  final private function handle(){
-    return curl_copy_handle($this->handle);
-  }
-
-
-  final static function url(string $url):self{
-    return new self($url);
   }
 
 
@@ -88,32 +84,18 @@ class request{
   }
 
 
-  final function query(array $q):self{
-    return $this->setopt(CURLOPT_URL, strstr(curl_getinfo($this->handle,CURLINFO_EFFECTIVE_URL).'?','?',true).'?'.http_build_query($q,'','&',PHP_QUERY_RFC3986));
+  final static function url(string $url):self{
+    return new self($url);
   }
 
 
-  final static function har(\stdClass $har){
-    return (new self)->curl_setopt_array([
-      CURLOPT_CUSTOMREQUEST=>$har->method,
-      CURLOPT_URL=>$har->url,
-      CURLOPT_HTTPHEADER=>$har->headers,
-    ])->response();
-  }
-
-
-  final function fetch(array $query=[]){
-    return $this->query($query)->response();
-  }
-
-
-  final private function response(){
+  final private function response():object{//{{{
 
     return new class(curl_copy_handle($this->handle)){
 
       private $header, $body, $cookie;
 
-      final function __construct($handle){
+      function __construct($handle){
         curl_setopt_array($handle,[
           CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
           CURLOPT_RETURNTRANSFER=>true,
@@ -138,66 +120,45 @@ class request{
           throw new \RuntimeException(curl_error($handle),curl_errno($handle));
       }
 
-
-      final function __destruct(){
+      function __destruct(){
         fclose($this->body) and fclose($this->cookie);
       }
 
-
-      final function __toString(){
+      function __toString(){
         return $this->body();
       }
 
-
-      final function har():string{//TODO
-        return json_encode([]);
-      }
-
-
-      final function header(string $key=''){
+      function header(string $key=''){
         return $key?array_change_key_case($this->header)[strtolower(trim($key))]??null:$this->header;
       }
 
-
-      final function body():string{
+      function body():string{
         rewind($this->body);
         return stream_get_contents($this->body);
       }
 
-
-      final function stream(){
+      function stream(){
         rewind($this->body);
         return $this->body;
       }
 
-
-      final function json(){
-        return json_decode($this->body());
-      }
-
-
-      final function xml():?\SimpleXMLElement{
-        libxml_use_internal_errors(true);
-        return simplexml_load_string($this->body())?:null;
-      }
-
     };
 
-  }
+  }//}}}
 
 
 
-  final function GET(){
+  final function GET():object{
     return $this->response();
   }
 
 
-  final function ping(){
+  final function ping():object{
     return $this->setopt(CURLOPT_CONNECT_ONLY,true)->response();
   }
 
 
-  final function upload(\CURLFile ...$file){
+  final function upload(\CURLFile ...$file):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>'POST',
       CURLOPT_PUT=>true,
@@ -207,7 +168,7 @@ class request{
   }
 
 
-  final function POST(string $body=null){
+  final function POST(string $body=null):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POST=>true,
@@ -216,7 +177,7 @@ class request{
   }
 
 
-  final function PUT(string $body=null){
+  final function PUT(string $body=null):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POST=>true,
@@ -225,7 +186,7 @@ class request{
   }
 
 
-  final function PATCH(string $body=null){
+  final function PATCH(string $body=null):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
@@ -233,7 +194,7 @@ class request{
   }
 
 
-  final function DELETE(string $body=null){
+  final function DELETE(string $body=null):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
@@ -241,12 +202,12 @@ class request{
   }
 
 
-  final function HEAD(){
+  final function HEAD():object{
     return $this->setopt($this->handle, CURLOPT_NOBODY, true)->response();
   }
 
 
-  final function OPTIONS(){
+  final function OPTIONS():object{
     return $this->setopt($this->handle, CURLOPT_CUSTOMREQUEST, __FUNCTION__)->response();
   }
 
