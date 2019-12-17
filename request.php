@@ -1,5 +1,9 @@
 <?php namespace http; // vim: se fdm=marker:
 
+/**
+ * @todo 携带cookie请求
+ * @todo 是否支持下载进度
+ */
 class request{
 
   private $handle, $header=[];
@@ -14,6 +18,7 @@ class request{
         CURLOPT_FOLLOWLOCATION=>true,
         CURLINFO_HEADER_OUT=>true,
         CURLOPT_CONNECTTIMEOUT=>6,
+        CURLOPT_FAILONERROR => true, //FIXME 还没想好实际用途
       ]
     );
 
@@ -54,7 +59,7 @@ class request{
   }
 
 
-  final function timeout(int $sec=30):self{
+  final function timeout(int $sec=5):self{
     return $this->setopt(CURLOPT_TIMEOUT, $sec);
   }
 
@@ -79,43 +84,49 @@ class request{
   }
 
 
+  /**
+   * @fixme 似乎没什么额外的好处，不如拼装raw原始请求
+   */
   final function __toString():string{
     return curl_getinfo($this->handle,CURLINFO_EFFECTIVE_URL);
   }
 
 
-  final static function url(string $url):self{
-    return new self($url);
-  }
-
-
   final private function response():object{//{{{
 
+    /**
+     * @fixme cookie管理
+     * @todo 导出为har格式
+     * @todo 整合curl_getinfo信息
+     */
     return new class(curl_copy_handle($this->handle)){
 
-      private $header, $body, $cookie;
+      //public $header, $body, $cookie;
 
       function __construct($handle){
         curl_setopt_array($handle,[
           CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
           CURLOPT_RETURNTRANSFER=>true,
           CURLOPT_HEADER=>false,
-          CURLOPT_WRITEHEADER => $header=fopen('php://temp','r+b'),
+          CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
           CURLOPT_FILE => $this->body=fopen('php://temp','r+b'),
           CURLOPT_COOKIEJAR => $this->cookie = fopen('php://temp','r+b'),
           CURLOPT_COOKIEFILE => $this->cookie,
         ]);
 
         $exec = curl_exec($handle);
-        foreach(curl_getinfo($handle) as $k=>$v)
-          $this->$k = $v;
+        foreach(curl_getinfo($handle) as $k=>$v) $this->$k = $v;//FIXME 为什么要逐一赋值？？？
         curl_close($handle);
 
+
+        //TODO 此处判断返回码，非2xx则throws
+        //FIXME 但是如果throw异常了，还能继续利用header和body吗？
+
         if($exec){
-          rewind($header);
-          foreach(request::http_response_header(explode("\r\n", stream_get_contents($header))) as $k=>$v)
+          rewind($tmp_header);
+          foreach(request::http_response_header(explode("\r\n", stream_get_contents($tmp_header))) as $k=>$v)
             $this->header[$k] = $v;
-          fclose($header);
+          fclose($tmp_header);
         }else
           throw new \RuntimeException(curl_error($handle),curl_errno($handle));
       }
@@ -125,21 +136,16 @@ class request{
       }
 
       function __toString(){
-        return $this->body();
-      }
-
-      function header(string $key=''){
-        return $key?array_change_key_case($this->header)[strtolower(trim($key))]??null:$this->header;
-      }
-
-      function body():string{
         rewind($this->body);
         return stream_get_contents($this->body);
       }
 
-      function stream(){
-        rewind($this->body);
-        return $this->body;
+      /**
+       * @todo 有必要实现成功/失败的回调函数吗？
+       * @todo 或者预加工整理一下结果？
+       */
+      function __invoke(callable $fn){
+
       }
 
     };
@@ -148,13 +154,11 @@ class request{
 
 
 
+  /**
+   * @todo 是否alias invoke表示GET？？？
+   */
   final function GET():object{
     return $this->response();
-  }
-
-
-  final function ping():object{
-    return $this->setopt(CURLOPT_CONNECT_ONLY,true)->response();
   }
 
 
@@ -177,11 +181,15 @@ class request{
   }
 
 
+  /**
+   * @fixme 此时改变了opt，是否会影响下次谓词动作的行为？是否需要重置？
+   */
   final function PUT(string $body=null):object{
     return $this->setopt_array([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
-      CURLOPT_POST=>true,
-      CURLOPT_POSTFIELDS=>$body,
+      CURLOPT_PUT=>true,
+      CURLOPT_INFILE=>'',//FIXME
+      CURLOPT_INFILESIZE=>0,
     ])->header('Content-Length',strlen($body))->response();
   }
 
