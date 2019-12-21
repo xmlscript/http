@@ -108,7 +108,7 @@ class request{
     //CURLOPT_KRB4LEVEL => '',
     //CURLOPT_LOGIN_OPTIONS => '',
     //CURLOPT_PINNEDPUBLICKEY => '',
-    //CURLOPT_POSTFIELDS => '', //TODO 全部数据使用HTTP协议中的 "POST" 操作来发送。 要发送文件，在文件名前面加上@前缀并使用完整路径。 文件类型可在文件名后以 ';type=mimetype' 的格式指定。 这个参数可以是 urlencoded 后的字符串，类似'para1=val1&para2=val2&...'，也可以使用一个以字段名为键值，字段数据为值的数组。 如果value是一个数组，Content-Type头将会被设置成multipart/form-data。 从 PHP 5.2.0 开始，使用 @ 前缀传递文件时，value 必须是个数组。 从 PHP 5.5.0 开始, @ 前缀已被废弃，文件可通过 CURLFile 发送。 设置 CURLOPT_SAFE_UPLOAD 为 TRUE 可禁用 @ 前缀发送文件，以增加安全性。 
+    //CURLOPT_POSTFIELDS => '', //TODO 全部数据使用HTTP协议中的 "POST" 操作来发送。 这个参数可以是 urlencoded 后的字符串，类似'para1=val1&para2=val2&...'，也可以使用一个以字段名为键值，字段数据为值的数组。 如果value是一个数组，Content-Type头将会被设置成multipart/form-data。 文件可通过 CURLFile 发送。 
     //CURLOPT_PRIVATE => '',
     //CURLOPT_PROXY => '',
     //CURLOPT_PROXY_SERVICE_NAME => '',
@@ -176,7 +176,7 @@ class request{
 
     return new class($opts) extends request{
 
-      public $code, $header, $body;
+      public $header, $body, $info;
 
       function __construct($opts){
 
@@ -205,7 +205,7 @@ class request{
             $this->header[$k] = $v;
           fclose($header);
 
-          $this->code = curl_getinfo(static::$handle, CURLINFO_HTTP_CODE);
+          $this->info = curl_getinfo(static::$handle);
 
         }else
           throw new \RuntimeException(curl_error(static::$handle)?:'opt err.',curl_errno(static::$handle));
@@ -219,6 +219,9 @@ class request{
         return curl_getinfo(static::$handle);
       }
 
+      /**
+       * @todo 如果是二进制又当如何？
+       */
       function __toString(){
         rewind($this->body);
         return stream_get_contents($this->body);
@@ -249,6 +252,9 @@ class request{
   }
 
 
+  /**
+   * @todo 静默植入MAX_UPLOAD_SIZE字段
+   */
   final function upload(string $url, \CURLFile ...$file):object{
     return $this->response([
       CURLOPT_CUSTOMREQUEST => 'POST',
@@ -260,24 +266,20 @@ class request{
   }
 
 
-  final function POST(string $url, string $body=null):object{
-    return $this->response([
-      CURLOPT_CUSTOMREQUEST => __FUNCTION__,
-      CURLOPT_POST => true, //FIXME 
+  final function POST(string $url, array $body=[]):object{
+    return static::response([
       CURLOPT_POSTFIELDS => $body,
       CURLOPT_URL=>$url,
-      CURLOPT_HTTPHEADER => ['Content-Length: '.strlen($body)],
     ]);
   }
 
 
-  final function PUT(string $url, string $body=null):object{
-    return $this->response([
+  final function PUT(string $url, $body=null):object{
+    return static::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
-      CURLOPT_POST => true,
       CURLOPT_POSTFIELDS => $body,
       CURLOPT_URL=>$url,
-      CURLOPT_HTTPHEADER => ['Content-Length: '.strlen($body)],
+      CURLOPT_HTTPHEADER => ['Content-Type: text/xml'],
     ]);
   }
 
