@@ -6,7 +6,7 @@
  */
 class request{
 
-  protected static $handle, $cookie;
+  protected static $cookie, $handle;
 
   protected static $opts = [//{{{
 
@@ -161,14 +161,14 @@ class request{
 
 
   function __construct(){
-    static::$handle = curl_init();//FIXME 全局？对象内？
-    static::$cookie = tempnam('/tmp',__CLASS__); //FIXME 连续抓取很久之后是否变慢？
+    static::$cookie = tempnam('/tmp','cookie'); //FIXME 连续抓取很久之后是否变慢？
+    static::$handle = curl_init();
   }
 
   function __destruct(){
-    curl_close(static::$handle);
-    //var_dump(file_get_contents(static::$cookie));
+    //var_dump(static::$cookie,file_get_contents(static::$cookie));
     unlink(static::$cookie);
+    curl_close(static::$handle);
   }
 
 
@@ -176,7 +176,7 @@ class request{
 
     return new class($opts) extends request{
 
-      public $header, $body;
+      public $code, $header, $body;
 
       function __construct($opts){
 
@@ -198,31 +198,31 @@ class request{
           CURLINFO_HEADER_OUT=>true,
         ]);
 
+        if(curl_exec(static::$handle)){
 
-        $exec = curl_exec(static::$handle);
-        foreach(curl_getinfo(static::$handle) as $k=>$v)
-          $this->info[$k] = $v;
-
-        if($exec){
           rewind($header);
           foreach(request::http_response_header(explode("\r\n", stream_get_contents($header))) as $k=>$v)
             $this->header[$k] = $v;
           fclose($header);
+
+          $this->code = curl_getinfo(static::$handle, CURLINFO_HTTP_CODE);
+
         }else
           throw new \RuntimeException(curl_error(static::$handle)?:'opt err.',curl_errno(static::$handle));
       }
-
 
       function __destruct(){
         fclose($this->body);
       }
 
+      function __debugInfo():array{
+        return curl_getinfo(static::$handle);
+      }
 
       function __toString(){
         rewind($this->body);
         return stream_get_contents($this->body);
       }
-
 
       function har():string{//TODO
         return json_encode([]);
