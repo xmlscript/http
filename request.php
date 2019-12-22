@@ -172,7 +172,7 @@ class request{
   }
 
 
-  final private static function response(array $opts=[]){//{{{
+  final private function response(array $opts=[]){//{{{
 
     return new class($opts) extends request{
 
@@ -185,7 +185,7 @@ class request{
         $set = curl_setopt_array(static::$handle, static::$opts+$opts+[
           CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
           CURLOPT_RETURNTRANSFER=>true,
-          //CURLOPT_HEADER=>false,
+          CURLOPT_HEADER=>false,
           CURLOPT_WRITEHEADER => $header=fopen('php://temp','r+b'),
           CURLOPT_FILE => $this->body=fopen('php://temp','r+b'),
 
@@ -236,15 +236,15 @@ class request{
   }//}}}
 
 
-  final static function GET(string $url){
-    return static::response([
+  final function GET(string $url){
+    return self::response([
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final static function ping():object{
-    return $this->response([
+  final function ping():object{
+    return self::response([
       CURLOPT_CONNECT_ONLY => true,
       CURLOPT_URL=>$url,
       CURLOPT_NOBODY => true,
@@ -255,8 +255,8 @@ class request{
   /**
    * @todo 静默植入MAX_UPLOAD_SIZE字段
    */
-  final static function upload(string $url, \CURLFile ...$file):object{
-    return $this->response([
+  final function upload(string $url, \CURLFile ...$file):object{
+    return self::response([
       CURLOPT_CUSTOMREQUEST => 'POST',
       CURLOPT_PUT => true,
       CURLOPT_UPLOAD => true,
@@ -266,17 +266,19 @@ class request{
   }
 
 
-  final static function POST(string $url, array $body=[]):object{
-    return static::response([
-      CURLOPT_POSTFIELDS => $body,
-      CURLOPT_POST => true,
+  final function POST(string $url, array $body=[]):object{
+    return self::response([
       CURLOPT_URL=>$url,
+      CURLOPT_POST => true,
+      CURLOPT_POSTFIELDS => $body,
+      CURLOPT_POSTREDIR => CURL_REDIR_POST_ALL,
+      CURLOPT_HTTPHEADER => ['Expect:'],
     ]);
   }
 
 
-  final static function PUT(string $url, $body=null):object{
-    return static::response([
+  final function PUT(string $url, $body=null):object{
+    return self::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_POSTFIELDS => $body,
       CURLOPT_URL=>$url,
@@ -285,8 +287,8 @@ class request{
   }
 
 
-  final static function PATCH(string $url, string $body=null):object{
-    return static::response([
+  final function PATCH(string $url, string $body=null):object{
+    return self::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
       CURLOPT_URL=>$url,
@@ -294,24 +296,41 @@ class request{
   }
 
 
-  final static function DELETE(string $url):object{
-    return static::response([
+  final function DELETE(string $url):object{
+    return self::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final static function HEAD(string $url):object{
-    return static::response([
+  final function HEAD(string $url):object{
+    return self::response([
       CURLOPT_NOBODY => true,
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final static function OPTIONS(string $url):object{
-    return static::response([
+  final function OPTIONS(string $url):object{
+    return self::response([
+      CURLOPT_CUSTOMREQUEST => __FUNCTION__,
+      CURLOPT_NOBODY => true,
+      CURLOPT_URL=>$url,
+    ]);
+  }
+
+
+  final function TRACE(string $url):object{
+    return self::response([
+      CURLOPT_CUSTOMREQUEST => __FUNCTION__,
+      CURLOPT_URL=>$url,
+    ]);
+  }
+
+
+  final function CONNECT(string $url):object{
+    return self::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_URL=>$url,
     ]);
