@@ -174,11 +174,11 @@ class request{
 
   final private function response(array $opts=[]){//{{{
 
-    return new class($opts) extends request{
+    return new class($opts,$this) extends request{
 
-      public $header, $body, $info;
+      private $body;
 
-      function __construct($opts){
+      function __construct($opts, request $req){
 
         curl_reset(static::$handle);
 
@@ -202,10 +202,14 @@ class request{
 
           rewind($header);
           foreach(request::http_response_header(explode("\r\n", stream_get_contents($header))) as $k=>$v)
-            $this->header[$k] = $v;
+            $this->$k = $v;
           fclose($header);
 
-          $this->info = curl_getinfo(static::$handle);
+          $this->info = $this->info();
+
+          foreach(static::http_response_header(explode("\r\n",curl_getinfo(static::$handle,CURLINFO_HEADER_OUT))) as $k=>$v)
+            $req->$k = $v;
+
 
         }else
           throw new \RuntimeException(curl_error(static::$handle),curl_errno(static::$handle));
@@ -215,7 +219,7 @@ class request{
         fclose($this->body);
       }
 
-      function __debugInfo():array{
+      function info():array{
         return curl_getinfo(static::$handle);
       }
 
@@ -282,7 +286,7 @@ class request{
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_POSTFIELDS => $body,
       CURLOPT_URL=>$url,
-      CURLOPT_HTTPHEADER => ['Content-Type: text/xml'],
+      CURLOPT_HTTPHEADER => ['Content-Type: text/xml'],//FIXME 
     ]);
   }
 
