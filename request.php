@@ -16,7 +16,7 @@ class request{
     //CURLOPT_CONNECT_ONLY => true,
     //CURLOPT_CRLF => true,
     //CURLOPT_DNS_USE_GLOBAL_CACHE => true,
-    CURLOPT_FAILONERROR => true,
+    //CURLOPT_FAILONERROR => true,
     //CURLOPT_SSL_FALSESTART => true,
     //CURLOPT_FILETIME => true,
     //CURLOPT_FOLLOWLOCATION => true,
@@ -208,7 +208,7 @@ class request{
           $this->info = curl_getinfo(static::$handle);
 
         }else
-          throw new \RuntimeException(curl_error(static::$handle)?:'opt err.',curl_errno(static::$handle));
+          throw new \RuntimeException(curl_error(static::$handle),curl_errno(static::$handle));
       }
 
       function __destruct(){
@@ -243,7 +243,7 @@ class request{
   }
 
 
-  final function ping():object{
+  final static function ping():object{
     return $this->response([
       CURLOPT_CONNECT_ONLY => true,
       CURLOPT_URL=>$url,
@@ -255,7 +255,7 @@ class request{
   /**
    * @todo 静默植入MAX_UPLOAD_SIZE字段
    */
-  final function upload(string $url, \CURLFile ...$file):object{
+  final static function upload(string $url, \CURLFile ...$file):object{
     return $this->response([
       CURLOPT_CUSTOMREQUEST => 'POST',
       CURLOPT_PUT => true,
@@ -266,15 +266,16 @@ class request{
   }
 
 
-  final function POST(string $url, array $body=[]):object{
+  final static function POST(string $url, array $body=[]):object{
     return static::response([
       CURLOPT_POSTFIELDS => $body,
+      CURLOPT_POST => true,
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final function PUT(string $url, $body=null):object{
+  final static function PUT(string $url, $body=null):object{
     return static::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_POSTFIELDS => $body,
@@ -284,38 +285,34 @@ class request{
   }
 
 
-  final function PATCH(string $url, string $body=null):object{
-    return $this->response([
+  final static function PATCH(string $url, string $body=null):object{
+    return static::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
       CURLOPT_URL=>$url,
-      CURLOPT_HTTPHEADER => ['Content-Length: '.strlen($body)],
     ]);
   }
 
 
-  final function DELETE(string $url, string $body=null):object{
-    return $this->response([
+  final static function DELETE(string $url):object{
+    return static::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
-      CURLOPT_POSTFIELDS=>$body,
       CURLOPT_URL=>$url,
-      CURLOPT_HTTPHEADER => ['Content-Length: '.strlen($body)],
     ]);
   }
 
 
-  final function HEAD(string $url):object{
-    return $this->response([
-      CURLOPT_CUSTOMREQUEST, __FUNCTION__,
+  final static function HEAD(string $url):object{
+    return static::response([
       CURLOPT_NOBODY => true,
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final function OPTIONS(string $url):object{
-    return $this->response([
-      CURLOPT_CUSTOMREQUEST, __FUNCTION__,
+  final static function OPTIONS(string $url):object{
+    return static::response([
+      CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_URL=>$url,
     ]);
   }
