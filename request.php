@@ -167,6 +167,10 @@ class request{
     //TODO 同一个req对象共享同一个cookie
     static::$cookie = tempnam('/tmp','cookie');
     static::$handle_proto = curl_init();
+
+    //TODO 要不要继承所有$_SERVER['HTTP_***']，以便外部请求时直接设置
+    $this->{'User-Agent'} = $_SERVER['HTTP_USER_AGENT']??__CLASS__;
+    $this->{'Accept-Language'} = $_SERVER['HTTP_ACCEPT_LANGUAGE']??'TODO: env';
   }
 
   final function __destruct(){
@@ -181,7 +185,15 @@ class request{
     $this->$k = $v;
   }
 
+
   final private function response(array $opts=[]):object{//{{{
+
+    //TODO 采集防盗链内嵌图片时，记得携带referer，并修改accept
+
+    $arr = [];
+    foreach($this as $k=>$v)
+      if($k !== 'Host') //FIXME 可以当作分段设置url
+        $arr[] = "$k: $v";
 
     curl_reset(static::$handle_proto);
 
@@ -189,6 +201,7 @@ class request{
       CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
       CURLOPT_RETURNTRANSFER=>true,
       CURLOPT_HEADER=>false,
+      CURLOPT_ENCODING => '',
 
       CURLOPT_COOKIEJAR => static::$cookie,
       CURLOPT_COOKIEFILE => static::$cookie,
@@ -196,12 +209,15 @@ class request{
       CURLOPT_AUTOREFERER=>true,
       CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
       CURLOPT_FOLLOWLOCATION=>true,
-      CURLOPT_HTTPHEADER => (array)$this,//FIXME ['k: v','k: v']
+      CURLOPT_HTTPHEADER => $arr,
     ]);
 
 
-
-
+    /**
+     * @todo 继承遍历接口，以便翻页
+     * @todo __invoke($code,$body)
+     * @todo 要不要FAILONERROR
+     */
     return new class(curl_copy_handle(static::$handle_proto), $this){
 
       private static $private = [];
@@ -224,13 +240,12 @@ class request{
         foreach(request::http_response_header(explode("\r\n",stream_get_contents($tmp_header))) as $k => $v)
           $this->$k = $v;
 
-        var_dump(curl_getinfo($handle,CURLINFO_HEADER_OUT));
 
+        foreach($req as $k=>$v) unset($req->$k);
 
         //FIXME 自动跳转之后可能产生以空行分隔的string
-        //TODO 写回request对象！！！
         foreach(request::http_response_header(explode("\r\n",curl_getinfo($handle,CURLINFO_HEADER_OUT))) as $k=>$v)
-          $req->{"___ $k"} = $v;
+          $req->$k = $v;
 
       }
 
