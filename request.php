@@ -4,11 +4,12 @@
  * @todo 显式code，message
  * @todo 请求报文也要get
  * @todo accept匹配content-type，如果不匹配，则NOBODY
+ * @fixme 可能尚未解决cookie的问题
  */
 class request{
 
-  private static $cookie; //同一个req对象共用
-  private static $handle_proto;
+  private static $cookie = '';
+  private static $handle_proto = null;
 
   //{{{
 
@@ -163,14 +164,8 @@ class request{
 
 
   final function __construct(){
-
-    //TODO 同一个req对象共享同一个cookie
     static::$cookie = tempnam('/tmp','cookie');
     static::$handle_proto = curl_init();
-
-    //TODO 要不要继承所有$_SERVER['HTTP_***']，以便外部请求时直接设置
-    $this->{'User-Agent'} = $_SERVER['HTTP_USER_AGENT']??__CLASS__;
-    $this->{'Accept-Language'} = $_SERVER['HTTP_ACCEPT_LANGUAGE']??'TODO: env';
   }
 
   final function __destruct(){
@@ -220,6 +215,8 @@ class request{
      */
     return new class(curl_copy_handle(static::$handle_proto), $this){
 
+      private static $har = [];//TODO 记录每次请求，最后换算成json.har
+
       private static $private = [];
 
       function __construct($handle, $req){
@@ -228,6 +225,7 @@ class request{
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
           CURLOPT_FILE => static::$private[spl_object_id($this)]['body'] = fopen('php://temp','r+b'),
           CURLINFO_HEADER_OUT=>true,
+          //CURLOPT_FORBID_REUSE => true,
         ]);
 
 
@@ -243,9 +241,69 @@ class request{
 
         foreach($req as $k=>$v) unset($req->$k);
 
+        //var_dump(curl_getinfo($handle, CURLINFO_HEADER_OUT));
+
         //FIXME 自动跳转之后可能产生以空行分隔的string
         foreach(request::http_response_header(explode("\r\n",curl_getinfo($handle,CURLINFO_HEADER_OUT))) as $k=>$v)
           $req->$k = $v;
+
+        //TODO 记录HAR
+        static::$har[] = [
+          'pageref' => 'page_1',
+          'startedDateTime' => '',
+          'request' => [
+            'bodySize' => 0,
+            'method' => '???', //TODO 怎么获取
+            'url' => '',
+            'httpVersion' => 'HTTP/1.1',
+            'headers' => [
+              ['name'=>'Host','value'=>'xxx'],
+              ['name'=>'User-Agent','value'=>'xxx'],
+            ],
+            'cookies' => [
+              ['name'=>'PHPSESSID','value'=>'xxxx'],
+              ['name'=>'__utmc','value'=>'xxxx'],
+            ],
+            'queryString' => [
+
+            ],
+            'headersSize' => 123,
+          ],
+          'response' => [
+            'status' => 200,
+            'statusText' => 'OK',
+            'httpVersion' => 'HTTP/1.1',
+            'headers' => [
+              ['name'=>'Server','value'=>'Apache'],
+              ['name'=>'Vary','value'=>'negotiate'],
+            ],
+            'cookies' => [
+
+            ],
+            'content' => [
+              'mimeType' => 'text/html; charset=UTF-8',
+              'size' => 12345,
+              'text' => 'str',
+            ],
+            'redirectURL' => '',
+            'headersSize' => 123,
+            'bodySize' => 456,
+          ],
+          'cache' => [],
+          'timings' => [
+            'blocked' => 11,
+            'dns' => 22,
+            'connect' => 33,
+            'ssl' => 44,
+            'send' => 55,
+            'wait' => 66,
+            'receive' => 77,
+          ],
+          'time' => 123,
+          '_securityState' => 'insecure',
+          'serverIPAddress' => '127.0.0.1',
+          'connection' => '80',
+        ];
 
       }
 
@@ -256,10 +314,6 @@ class request{
         unset(static::$private[$id]);
       }
 
-      function info():array{
-        return curl_getinfo(static::$private[spl_object_id($this)]['handle']);
-      }
-
       /**
        * @todo 如果是二进制又当如何？
        */
@@ -268,8 +322,31 @@ class request{
         return stream_get_contents(static::$private[spl_object_id($this)]['body']);
       }
 
-      function har():string{//TODO
-        return json_encode([]);
+      function __invoke(int $code, string $mime, callable $fn){
+        if($code === curl_getinfo(static::$private[spl_object_id($this)]['handle'],CURLINFO_HTTP_CODE))
+        return $fn("$this");
+      }
+
+      function info():array{
+        return curl_getinfo(static::$private[spl_object_id($this)]['handle']);
+      }
+
+      /**
+       * @todo 需要反映出重定向
+       * @todo 包含所有请求
+       */
+      static function har():string{
+        return json_encode(['log'=>[
+          'pages'=>[
+            'startedDateTime' => '',
+            'id' => 'page_1',
+            'pageTimings' => [
+              'onContentLoad' => 123,
+              'onLoad' => 456,
+            ]
+          ],
+          'entries'=>static::$har,
+        ]]);
       }
 
     };
