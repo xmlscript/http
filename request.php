@@ -193,35 +193,32 @@ class request{
     curl_reset(static::$handle_proto);
 
     curl_setopt_array(static::$handle_proto, $opts+[
-      CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
-      CURLOPT_RETURNTRANSFER=>true,
-      CURLOPT_HEADER=>false,
-      CURLOPT_ENCODING => '',
-
       CURLOPT_COOKIEJAR => static::$cookie,
       CURLOPT_COOKIEFILE => static::$cookie,
-
-      CURLOPT_AUTOREFERER=>true,
-      CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
-      CURLOPT_FOLLOWLOCATION=>true,
       CURLOPT_HTTPHEADER => $arr,
     ]);
 
 
     /**
      * @todo 继承遍历接口，以便翻页
-     * @todo __invoke($code,$body)
      * @todo 要不要FAILONERROR
      */
-    return new class(curl_copy_handle(static::$handle_proto), $this){
-
-      private static $har = [];//TODO 记录每次请求，最后换算成json.har
+    return new class(curl_copy_handle(static::$handle_proto), $this) implements \JsonSerializable{
 
       private static $private = [];
 
       function __construct($handle, $req){
 
         curl_setopt_array($handle, [
+          CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
+          CURLOPT_RETURNTRANSFER=>true,
+          CURLOPT_HEADER=>false,
+          CURLOPT_ENCODING => '',
+
+          CURLOPT_AUTOREFERER=>true,
+          CURLOPT_HEADEROPT=>CURLHEADER_SEPARATE,//FIXME 7.1.8
+          CURLOPT_FOLLOWLOCATION=>true,
+
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
           CURLOPT_FILE => static::$private[spl_object_id($this)]['body'] = fopen('php://temp','r+b'),
           CURLINFO_HEADER_OUT=>true,
@@ -247,8 +244,37 @@ class request{
         foreach(request::http_response_header(explode("\r\n",curl_getinfo($handle,CURLINFO_HEADER_OUT))) as $k=>$v)
           $req->$k = $v;
 
-        //TODO 记录HAR
-        static::$har[] = [
+      }
+
+      function __destruct(){
+        $id = spl_object_id($this);
+        fclose(static::$private[$id]['body']);
+        curl_close(static::$private[$id]['handle']);
+        unset(static::$private[$id]);
+      }
+
+
+      /**
+       * @todo 需要反映出重定向
+       * @todo 包含所有请求
+       */
+      function jsonSerialize():array{
+
+        /**
+        ['log'=>[
+          'pages'=>[
+            'startedDateTime' => '',
+            'id' => 'page_1',
+            'pageTimings' => [
+              'onContentLoad' => 123,
+              'onLoad' => 456,
+            ]
+          ],
+          'entries'=>static::$har,
+        ]]
+        /**/
+
+        return [
           'pageref' => 'page_1',
           'startedDateTime' => '',
           'request' => [
@@ -271,7 +297,7 @@ class request{
           ],
           'response' => [
             'status' => 200,
-            'statusText' => 'OK',
+            'statusText' => 'OJ8K',
             'httpVersion' => 'HTTP/1.1',
             'headers' => [
               ['name'=>'Server','value'=>'Apache'],
@@ -304,14 +330,6 @@ class request{
           'serverIPAddress' => '127.0.0.1',
           'connection' => '80',
         ];
-
-      }
-
-      function __destruct(){
-        $id = spl_object_id($this);
-        fclose(static::$private[$id]['body']);
-        curl_close(static::$private[$id]['handle']);
-        unset(static::$private[$id]);
       }
 
       /**
@@ -329,24 +347,6 @@ class request{
 
       function info():array{
         return curl_getinfo(static::$private[spl_object_id($this)]['handle']);
-      }
-
-      /**
-       * @todo 需要反映出重定向
-       * @todo 包含所有请求
-       */
-      static function har():string{
-        return json_encode(['log'=>[
-          'pages'=>[
-            'startedDateTime' => '',
-            'id' => 'page_1',
-            'pageTimings' => [
-              'onContentLoad' => 123,
-              'onLoad' => 456,
-            ]
-          ],
-          'entries'=>static::$har,
-        ]]);
       }
 
     };
