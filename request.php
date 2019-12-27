@@ -1,13 +1,9 @@
 <?php namespace http; // vim: se fdm=marker:
 
-/**
- * @todo accept匹配content-type，如果不匹配，则NOBODY
- * @fixme 可能尚未解决cookie的问题
- */
 class request{
 
-  private static $cookie = '';
   private static $handle_proto = null;
+  private static $handler = null;
 
   //{{{
 
@@ -119,14 +115,14 @@ class request{
 
 
   final function __construct(){
-    static::$cookie = tempnam('/tmp','cookie');
     static::$handle_proto = curl_init();
+    static::$handler = curl_share_init();
+    curl_share_setopt(static::$handler, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
   }
 
   final function __destruct(){
-    //var_dump(static::$cookie,file_get_contents(static::$cookie));
-    unlink(static::$cookie);
     curl_close(static::$handle_proto);
+    curl_share_close(static::$handler);
   }
 
 
@@ -139,15 +135,14 @@ class request{
 
     $arr = [];
     foreach($this as $k=>$v)
-      if(strcasecmp($k,'Host'))
+      if(strcasecmp($k,'Host') && strcasecmp($k,'Cookie'))//FIXME 不优雅
         $arr[] = "$k: $v";
 
     curl_reset(static::$handle_proto);
 
     curl_setopt_array(static::$handle_proto, $opts+[
-      CURLOPT_COOKIEJAR => static::$cookie, //FIXME 可能不需要
-      CURLOPT_COOKIEFILE => static::$cookie,
       CURLOPT_HTTPHEADER => $arr,
+      CURLOPT_SHARE => static::$handler,
     ]);
 
 
@@ -155,11 +150,11 @@ class request{
      * @todo 继承遍历接口，以便翻页
      * @todo 要不要FAILONERROR
      */
-    return new class(curl_copy_handle(static::$handle_proto), $this) implements \JsonSerializable{
+    return new class(curl_copy_handle(static::$handle_proto), $this, static::$handler) implements \JsonSerializable{
 
       private static $private = [];
 
-      function __construct($handle, $req){
+      function __construct($handle, $req, $sh){
 
         $id = spl_object_id($this);
 
@@ -170,6 +165,7 @@ class request{
           CURLOPT_HEADER=>false,
           CURLOPT_ENCODING => '',
           CURLOPT_DEFAULT_PROTOCOL => 'http',
+          CURLOPT_SHARE => $sh,
 
           CURLOPT_AUTOREFERER=>true,
           CURLOPT_FOLLOWLOCATION=>true,
@@ -184,10 +180,17 @@ class request{
         if(!curl_exec($handle))
           throw new \RuntimeException(curl_error($handle),curl_errno($handle));
 
-        static::$private[$id]['handle'] = $handle;
+        foreach($req as $k=>$v) unset($req->$k);
+
+        static::$private[$id]['info'] = curl_getinfo($handle,CURLINFO_HEADER_OUT);
+        curl_close($handle);
+
 
         rewind($tmp_header);
-        foreach(request::http_response_header(explode("\r\n",strstr(stream_get_contents($tmp_header),"\r\n\r\n"))) as $k => $v)
+        //echo '<pre>--',stream_get_contents($tmp_header),'--</pre>';
+
+        rewind($tmp_header);
+        foreach(request::http_response_header(explode("\r\n",end(explode("\r\n\r\n",trim(stream_get_contents($tmp_header)))))) as $k => $v)
           if(isset($this->$k)){
             if(is_string($this->$k))
               $this->$k = [$this->$k];
@@ -195,9 +198,9 @@ class request{
           }else
             $this->$k = $v;
 
-        foreach($req as $k=>$v) unset($req->$k);
 
-        foreach(request::http_response_header(explode("\r\n",curl_getinfo($handle,CURLINFO_HEADER_OUT))) as $k=>$v)
+        //echo '<pre>--',curl_getinfo($handle,CURLINFO_HEADER_OUT).'--</pre>';
+        foreach(request::http_response_header(explode("\r\n",static::$private[$id]['info'])) as $k=>$v)
           $req->$k = $v;
 
       }
@@ -205,7 +208,6 @@ class request{
       function __destruct(){
         $id = spl_object_id($this);
         fclose(static::$private[$id]['body']);
-        curl_close(static::$private[$id]['handle']);
         unset(static::$private[$id]);
       }
 
@@ -214,12 +216,9 @@ class request{
        * @todo 本想直接转换成har文件，但又无法和浏览器环境一一对应
        */
       function jsonSerialize():array{
-        return curl_getinfo(static::$private[spl_object_id($this)]['handle']);
+        return static::$private[spl_object_id($this)]['info'];
       }
 
-      /**
-       * @todo 如果是二进制又当如何？
-       */
       function __toString(){
         $id = spl_object_id($this);
         rewind(static::$private[$id]['body']);
@@ -227,7 +226,7 @@ class request{
       }
 
       function __invoke(int $code, callable $fn){
-        if($code === curl_getinfo(static::$private[spl_object_id($this)]['handle'],CURLINFO_HTTP_CODE))
+        if($code === static::$private[spl_object_id($this)]['info']['http_code'])
         return $fn("$this",$this->{'Content-Length'});
       }
 
