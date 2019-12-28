@@ -2,7 +2,6 @@
 
 class request{
 
-  private static $handle_proto = null;
   private static $handler = null;
 
   //{{{
@@ -115,13 +114,11 @@ class request{
 
 
   final function __construct(){
-    static::$handle_proto = curl_init();
     static::$handler = curl_share_init();
     curl_share_setopt(static::$handler, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
   }
 
   final function __destruct(){
-    curl_close(static::$handle_proto);
     curl_share_close(static::$handler);
   }
 
@@ -135,30 +132,32 @@ class request{
 
     $arr = [];
     foreach($this as $k=>$v)
-      if(strcasecmp($k,'Host') && strcasecmp($k,'Cookie'))//FIXME 不优雅
+      //FIXME 允许任意设置header，随后在设置里回避
+      if(strcasecmp($k,'Host') && strcasecmp($k,'Cookie') && strcasecmp($k,'Referer'))
         $arr[] = "$k: $v";
 
-    curl_reset(static::$handle_proto);
 
-    curl_setopt_array(static::$handle_proto, $opts+[
+    $opts += [
       CURLOPT_HTTPHEADER => $arr,
-      CURLOPT_SHARE => static::$handler,
-    ]);
+      CURLOPT_SHARE => static::$handler, //FIXME 能否直接传入匿名类而不丢失？
+    ];
 
 
     /**
      * @todo 继承遍历接口，以便翻页
      * @todo 要不要FAILONERROR
      */
-    return new class(curl_copy_handle(static::$handle_proto), $this, static::$handler) implements \JsonSerializable{
+    return new class($this, static::$handler, $opts) implements \JsonSerializable{
 
       private static $private = [];
 
-      function __construct($handle, $req, $sh){
+      function __construct(request $req, $sh, array $opt){
+
+        $handle = curl_init();
 
         $id = spl_object_id($this);
 
-        curl_setopt_array($handle, [
+        curl_setopt_array($handle, $opt+[
           CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
           CURLOPT_REDIR_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
           CURLOPT_RETURNTRANSFER=>true,
