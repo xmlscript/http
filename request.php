@@ -133,8 +133,9 @@ class request{
     $arr = [];
     foreach($this as $k=>$v)
       //FIXME 允许任意设置header，随后在设置里回避
-      if(strcasecmp($k,'Host') && strcasecmp($k,'Cookie') && strcasecmp($k,'Referer'))
+      if(strcasecmp($k,'Host'))
         $arr[] = "$k: $v";
+    //var_dump($arr);
 
 
     $opts += [
@@ -146,16 +147,31 @@ class request{
     /**
      * @todo 继承遍历接口，以便翻页
      * @todo 要不要FAILONERROR
+     * @todo 继承ArrayObject，方便$response['Content-Type']访问
      */
-    return new class($this, static::$handler, $opts) implements \JsonSerializable{
+    return new class($this, static::$handler, $opts)
+      implements \ArrayAccess, \JsonSerializable{
 
       private static $private = [];
 
+      function offsetExists($k):bool{
+        return isset($this->$k);
+      }
+      function offsetGet($k){
+        return $this->$k;
+      }
+      function offsetSet($k, $v){
+        $this->$k = $v;
+      }
+      function offsetUnset($k){
+        unset($this->$k);
+      }
+
       function __construct(request $req, $sh, array $opt){
 
-        $handle = curl_init();
-
         $id = spl_object_id($this);
+
+        $handle = curl_init();
 
         curl_setopt_array($handle, $opt+[
           CURLOPT_PROTOCOLS=>CURLPROTO_HTTP|CURLPROTO_HTTPS,
@@ -171,6 +187,7 @@ class request{
           CURLOPT_FILETIME=>true,
 
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
+          //FIXME POST，PUT才需要FILE
           CURLOPT_FILE => static::$private[$id]['body'] = fopen('php://temp','r+b'),
           CURLINFO_HEADER_OUT=>true,
           //CURLOPT_SASL_IR => true,
@@ -179,11 +196,11 @@ class request{
         if(!curl_exec($handle))
           throw new \RuntimeException(curl_error($handle),curl_errno($handle));
 
-        foreach($req as $k=>$v) unset($req->$k);
+        static::$private[$id]['info'] = curl_getinfo($handle);
 
-        static::$private[$id]['info'] = curl_getinfo($handle,CURLINFO_HEADER_OUT);
         curl_close($handle);
 
+        foreach($req as $k=>$v) unset($req->$k);
 
         rewind($tmp_header);
         //echo '<pre>--',stream_get_contents($tmp_header),'--</pre>';
@@ -198,8 +215,8 @@ class request{
             $this->$k = $v;
 
 
-        //echo '<pre>--',curl_getinfo($handle,CURLINFO_HEADER_OUT).'--</pre>';
-        foreach(request::http_response_header(explode("\r\n",static::$private[$id]['info'])) as $k=>$v)
+        echo '<pre>--',static::$private[$id]['info']['request_header'],'--</pre>';
+        foreach(request::http_response_header(explode("\r\n",static::$private[$id]['info']['request_header'])) as $k=>$v)
           $req->$k = $v;
 
       }
