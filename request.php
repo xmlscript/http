@@ -1,10 +1,24 @@
 <?php namespace http; // vim: se fdm=marker:
 
-class request{
+class request implements \ArrayAccess{
 
   private static $handler = null;
 
-  //{{{
+ 
+  function offsetExists($k):bool{
+    return isset($this->$k);
+  }
+  function offsetGet($k){
+    return $this->$k;
+  }
+  function offsetSet($k, $v){
+    $this->$k = $v;
+  }
+  function offsetUnset($k){
+    unset($this->$k);
+  }
+
+ //{{{
 
   //CURLOPT_COOKIESESSION => true,
   //CURLOPT_CERTINFO => true,
@@ -132,7 +146,6 @@ class request{
 
     $arr = [];
     foreach($this as $k=>$v)
-      //FIXME 允许任意设置header，随后在设置里回避
       if(strcasecmp($k,'Host'))
         $arr[] = "$k: $v";
     //var_dump($arr);
@@ -140,14 +153,13 @@ class request{
 
     $opts += [
       CURLOPT_HTTPHEADER => $arr,
-      CURLOPT_SHARE => static::$handler, //FIXME 能否直接传入匿名类而不丢失？
+      CURLOPT_SHARE => static::$handler,
     ];
 
 
     /**
      * @todo 继承遍历接口，以便翻页
      * @todo 要不要FAILONERROR
-     * @todo 继承ArrayObject，方便$response['Content-Type']访问
      */
     return new class($this, static::$handler, $opts)
       implements \ArrayAccess, \JsonSerializable{
@@ -258,15 +270,6 @@ class request{
   }
 
 
-  final function ping():object{
-    return self::response([
-      CURLOPT_CONNECT_ONLY => true,
-      CURLOPT_URL=>$url,
-      CURLOPT_NOBODY => true,
-    ]);
-  }
-
-
   /**
    * @todo 静默植入MAX_UPLOAD_SIZE字段
    */
@@ -281,6 +284,10 @@ class request{
   }
 
 
+  /**
+   * @todo 如何限制必须是关联数组？？？
+   * @todo 如何区分三种POST类型：表单(纯字段)，多段表单(上传)，任意类型php://input
+   */
   final function POST(string $url, array $body=[]):object{
     return self::response([
       CURLOPT_URL=>$url,
