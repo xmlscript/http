@@ -203,7 +203,7 @@ class request implements \ArrayAccess{
           //CURLOPT_SASL_IR => true,
         ]);
 
-        if(!curl_exec($handle))
+        if(curl_exec($handle)===false)
           throw new \RuntimeException(curl_error($handle),curl_errno($handle));
 
         static::$private[$id]['info'] = curl_getinfo($handle);
@@ -268,12 +268,20 @@ class request implements \ArrayAccess{
   }
 
 
-  /**
-   * @param $body 仅接受一维数组,key是表单name，多维必须指定不同的name[k]
-   * @todo MAX_FILE_SIZE必须早于file设置，而且如何提前确认对方服务器支持php及参数
-   */
   final function POST(string $url, array $body=[]):object{
-    //TODO 如果不是scalar，也不是curlfile，则悄悄的die？
+
+    //FIXME 除了CURLFile，其余kv均可来回解析而不丢失信息，如果不是，则表示参数错误
+    $query = http_build_query($body);
+    parse_str($query,$arr);
+    if($query!==http_build_query($arr))
+      throw new \InvalidArgumentException('表单的name使用了错误的字符或未显式指定嵌套数组的下标',400);
+
+
+    foreach($body as $k=>$v){
+      if(!(is_scalar($v) xor $v instanceof \CURLFile))
+        throw new \InvalidArgumentException('数组的值只接受字符串或CURLFile对象',400);
+    }
+
     if(array_filter($body,function($v){
       return is_scalar($v);
     })===$body)
