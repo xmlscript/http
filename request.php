@@ -150,12 +150,10 @@ class request implements \ArrayAccess{
         $arr[] = "$k: $v";
     //var_dump($arr);
 
-
     $opts += [
       CURLOPT_HTTPHEADER => $arr,
       CURLOPT_SHARE => static::$handler,
     ];
-
 
     /**
      * @todo 继承遍历接口，以便翻页
@@ -200,7 +198,7 @@ class request implements \ArrayAccess{
 
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
           //FIXME POST，PUT才需要FILE
-          CURLOPT_FILE => static::$private[$id]['body'] = fopen('php://temp','r+b'),
+          CURLOPT_FILE => static::$private[$id]['body'] = fopen('php://temp','r+b'),//FIXME r+b 还是w
           CURLINFO_HEADER_OUT=>true,
           //CURLOPT_SASL_IR => true,
         ]);
@@ -271,44 +269,36 @@ class request implements \ArrayAccess{
 
 
   /**
-   * @todo 静默植入MAX_UPLOAD_SIZE字段
-   */
-  final function upload(string $url, \CURLFile ...$file):object{
-    return self::response([
-      CURLOPT_CUSTOMREQUEST => 'POST',
-      CURLOPT_PUT => true,
-      CURLOPT_UPLOAD => true,
-      CURLOPT_POSTFIELDS => $file,
-      CURLOPT_URL=>$url,
-    ]);
-  }
-
-
-  /**
-   * @todo 如何限制必须是关联数组？？？
-   * @todo 如何区分三种POST类型：表单(纯字段)，多段表单(上传)，任意类型php://input
+   * @param $body 仅接受一维数组,key是表单name，多维必须指定不同的name[k]
+   * @todo MAX_FILE_SIZE必须早于file设置，而且如何提前确认对方服务器支持php及参数
    */
   final function POST(string $url, array $body=[]):object{
+    //TODO 如果不是scalar，也不是curlfile，则悄悄的die？
+    if(array_filter($body,function($v){
+      return is_scalar($v);
+    })===$body)
+      $body = http_build_query($body);
+
     return self::response([
       CURLOPT_URL=>$url,
       CURLOPT_POST => true,
       CURLOPT_POSTFIELDS => $body,
       CURLOPT_POSTREDIR => CURL_REDIR_POST_ALL,
-      CURLOPT_HTTPHEADER => ['Expect:'],
     ]);
   }
 
 
-  final function PUT(string $url, $body=null):object{
+  final function PUT(string $url, string $body=''):object{
     return self::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_POSTFIELDS => $body,
+      CURLOPT_NOBODY => true,
       CURLOPT_URL=>$url,
     ]);
   }
 
 
-  final function PATCH(string $url, string $body=null):object{
+  final function PATCH(string $url, string $body=''):object{
     return self::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
