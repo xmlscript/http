@@ -250,9 +250,9 @@ class request implements \ArrayAccess{
         return stream_get_contents(static::$private[$id]['body']);
       }
 
-      function __invoke(int $code, callable $fn){
-        if($code === static::$private[spl_object_id($this)]['info']['http_code'])
-        return $fn("$this",$this->{'Content-Length'});
+      function __invoke(callable $fn, int ...$code):self{
+        in_array(static::$private[spl_object_id($this)]['info']['http_code'],$code) and $fn("$this",$this->{'Content-Length'});
+        return $this;
       }
 
     };
