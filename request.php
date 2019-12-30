@@ -197,7 +197,6 @@ class request implements \ArrayAccess{
           CURLOPT_FILETIME=>true,
 
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
-          //FIXME POST，PUT才需要FILE
           CURLOPT_FILE => static::$private[$id]['body'] = fopen('php://temp','r+b'),//FIXME r+b 还是w
           CURLINFO_HEADER_OUT=>true,
           //CURLOPT_SASL_IR => true,
@@ -268,35 +267,29 @@ class request implements \ArrayAccess{
   }
 
 
-  final function POST(string $url, array $body=[]):object{
+  final function POST(string $url, array $form=[]):object{
 
-    //FIXME 除了CURLFile，其余kv均可来回解析而不丢失信息，如果不是，则表示参数错误
-    $query = http_build_query($body);
+    $query = http_build_query($form);
     parse_str($query,$arr);
+
     if($query!==http_build_query($arr))
       throw new \InvalidArgumentException('表单的name使用了错误的字符或未显式指定嵌套数组的下标',400);
 
-
     foreach($body as $k=>$v){
-      if(!(is_scalar($v) xor $v instanceof \CURLFile))
+      if(!(is_scalar($v) ^ $v instanceof \CURLFile))
         throw new \InvalidArgumentException('数组的值只接受字符串或CURLFile对象',400);
     }
-
-    if(array_filter($body,function($v){
-      return is_scalar($v);
-    })===$body)
-      $body = http_build_query($body);
 
     return self::response([
       CURLOPT_URL=>$url,
       CURLOPT_POST => true,
-      CURLOPT_POSTFIELDS => $body,
+      CURLOPT_POSTFIELDS => array_filter($body,'is_scalar')===$form?$query:$form,
       CURLOPT_POSTREDIR => CURL_REDIR_POST_ALL,
     ]);
   }
 
 
-  final function PUT(string $url, string $body=''):object{
+  final function PUT(string $url, string $body):object{
     return self::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
       CURLOPT_POSTFIELDS => $body,
@@ -306,7 +299,7 @@ class request implements \ArrayAccess{
   }
 
 
-  final function PATCH(string $url, string $body=''):object{
+  final function PATCH(string $url, string $body):object{
     return self::response([
       CURLOPT_CUSTOMREQUEST=>__FUNCTION__,
       CURLOPT_POSTFIELDS=>$body,
@@ -343,6 +336,7 @@ class request implements \ArrayAccess{
   final function TRACE(string $url):object{
     return self::response([
       CURLOPT_CUSTOMREQUEST => __FUNCTION__,
+      CURLOPT_NOBODY => true,
       CURLOPT_URL=>$url,
     ]);
   }
