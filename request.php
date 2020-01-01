@@ -1,21 +1,25 @@
 <?php namespace http; // vim: se fdm=marker:
 
-class request implements \ArrayAccess{
+class request implements \ArrayAccess, \Countable{
 
   private static $handler = null;
 
  
-  function offsetExists($k):bool{
+  final function offsetExists($k):bool{
     return isset($this->$k);
   }
-  function offsetGet($k){
+  final function offsetGet($k){
     return $this->$k;
   }
-  function offsetSet($k, $v){
+  final function offsetSet($k, $v){
     $this->$k = $v;
   }
-  function offsetUnset($k){
+  final function offsetUnset($k){
     unset($this->$k);
+  }
+
+  final function count():int{
+    return count((array)$this);
   }
 
  //{{{
@@ -160,7 +164,7 @@ class request implements \ArrayAccess{
      * @todo 要不要FAILONERROR
      */
     return new class($this, static::$handler, $opts)
-      implements \ArrayAccess, \JsonSerializable{
+      implements \ArrayAccess, \JsonSerializable, \Countable{
 
       private static $private = [];
 
@@ -179,6 +183,10 @@ class request implements \ArrayAccess{
 
       function __get(string $k):?string{
         return $this->$k??null;
+      }
+
+      function count():int{
+        return count((array)$this);
       }
 
       function __construct(request $req, $sh, array $opt){
