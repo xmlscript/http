@@ -202,8 +202,11 @@ class request implements \ArrayAccess{
           //CURLOPT_SASL_IR => true,
         ]);
 
-        if(curl_exec($handle)===false)
-          throw new \RuntimeException(curl_error($handle),curl_errno($handle));
+        curl_exec($handle);
+        $errno = curl_errno($handle);
+
+        if($errno !== CURLE_OK)
+          throw new \RuntimeException(curl_strerror($errno),$errno);
 
         static::$private[$id]['info'] = curl_getinfo($handle);
 
