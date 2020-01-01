@@ -28,21 +28,17 @@ class request implements \ArrayAccess, \Countable{
   //CURLOPT_CERTINFO => true,
   //CURLOPT_CRLF => true,
   //CURLOPT_DNS_USE_GLOBAL_CACHE => true,
-  //CURLOPT_FAILONERROR => true,
   //CURLOPT_SSL_FALSESTART => true,
-  //CURLOPT_FOLLOWLOCATION => true,
   //CURLOPT_FORBID_REUSE => true,
   //CURLOPT_FRESH_CONNECT => true,
   #CURLOPT_TCP_NODELAY => true,
   //CURLOPT_HTTPPROXYTUNNEL => true,
   //CURLOPT_NETRC => true,
-  //CURLOPT_NOBODY => true, // TRUE 时将不输出 BODY 部分。同时 Mehtod 变成了 HEAD。修改为 FALSE 时不会变成 GET。 
   //CURLOPT_NOPROGRESS => true, //默认自动 TRUE，只有为了调试才需要改变设置。 
   //CURLOPT_NOSIGNAL => true, // TRUE 时忽略所有的 cURL 传递给 PHP 进行的信号。在 SAPI 多线程传输时此项被默认启用，所以超时选项仍能使用。 
   //CURLOPT_PIPEWAIT => true,
   //CURLOPT_POST => true, //TRUE 时会发送 POST 请求，类型为：application/x-www-form-urlencoded，是 HTML 表单提交时最常见的一种。 
   //CURLOPT_PUT => true, // TRUE 时允许 HTTP 发送文件。要被 PUT 的文件必须在 CURLOPT_INFILE和CURLOPT_INFILESIZE 中设置。 
-  //CURLOPT_RETURNTRANSFER => true,
   //CURLOPT_SASL_IR => true,
   //CURLOPT_SSL_ENABLE_ALPN => true,
   //CURLOPT_SSL_ENABLE_NPN => true,
@@ -60,7 +56,6 @@ class request implements \ArrayAccess, \Countable{
   //CURLOPT_CONNECTTIMEOUT_MS => 000,
   //CURLOPT_DNS_CACHE_TIMEOUT => 120,
   //CURLOPT_EXPECT_100_TIMEOUT_MS => 1000,
-  //CURLOPT_FTPSSLAUTH => 000,
   //CURLOPT_HEADEROPT => 000,
   //CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_NONE,
   //CURLOPT_HTTPAUTH => 000,
@@ -70,7 +65,6 @@ class request implements \ArrayAccess, \Countable{
   //CURLOPT_MAXCONNECTS => 000,
   //CURLOPT_MAXREDIRS => 000, // 指定最多的 HTTP 重定向次数，这个选项是和CURLOPT_FOLLOWLOCATION一起使用的。 
   //CURLOPT_PORT => 000,
-  //CURLOPT_POSTREDIR => 000, //位掩码， 1 (301 永久重定向), 2 (302 Found) 和 4 (303 See Other) 设置 CURLOPT_FOLLOWLOCATION 时，什么情况下需要再次 HTTP POST 到重定向网址。
   //CURLOPT_PROXYAUTH => 000, //HTTP 代理连接的验证方式。使用在CURLOPT_HTTPAUTH中的位掩码。 当前仅仅支持 CURLAUTH_BASIC和CURLAUTH_NTLM。 
   //CURLOPT_PROXYPORT => 000, // 代理服务器的端口。端口也可以在CURLOPT_PROXY中设置。 
   //CURLOPT_PROXYTYPE => 000, // 可以是 CURLPROXY_HTTP (默认值) CURLPROXY_SOCKS4、 CURLPROXY_SOCKS5、 CURLPROXY_SOCKS4A 或 CURLPROXY_SOCKS5_HOSTNAME。 
@@ -87,8 +81,6 @@ class request implements \ArrayAccess, \Countable{
 
   //CURLOPT_CAINFO => '',// 一个保存着1个或多个用来让服务端验证的证书的文件名。这个参数仅仅在和CURLOPT_SSL_VERIFYPEER一起使用时才有意义。
   //CURLOPT_CAPATH => '',// 一个保存着多个CA证书的目录。这个选项是和CURLOPT_SSL_VERIFYPEER一起使用的。 
-  //CURLOPT_COOKIEFILE => '', //TODO 包含 cookie 数据的文件名，cookie 文件的格式可以是 Netscape 格式，或者只是纯 HTTP 头部风格，存入文件。如果文件名是空的，不会加载 cookie，但 cookie 的处理仍旧启用。 
-  //CURLOPT_COOKIEJAR => '', //TODO 连接结束后，比如，调用 curl_close 后，保存 cookie 信息的文件。 
   //CURLOPT_DNS_INTERFACE => '',
   //CURLOPT_DNS_LOCAL_IP4 => '',
   //CURLOPT_DNS_LOCAL_IP6 => '',
@@ -96,7 +88,6 @@ class request implements \ArrayAccess, \Countable{
   //CURLOPT_KEYPASSWD => '',
   //CURLOPT_KRB4LEVEL => '',
   //CURLOPT_PINNEDPUBLICKEY => '',
-  //CURLOPT_POSTFIELDS => '', //TODO 全部数据使用HTTP协议中的 "POST" 操作来发送。 这个参数可以是 urlencoded 后的字符串，类似'para1=val1&para2=val2&...'，也可以使用一个以字段名为键值，字段数据为值的数组。 如果value是一个数组，Content-Type头将会被设置成multipart/form-data。 文件可通过 CURLFile 发送。 
   //CURLOPT_PRIVATE => '',
   //CURLOPT_PROXY => '',
   //CURLOPT_PROXY_SERVICE_NAME => '',
@@ -155,13 +146,12 @@ class request implements \ArrayAccess, \Countable{
     //var_dump($arr);
 
     $opts += [
-      CURLOPT_HTTPHEADER => $arr,
-      CURLOPT_SHARE => static::$handler,
+      CURLOPT_HTTPHEADER => $arr, //FIXME 整段迁移到匿名类构造里，哪种好？
+      //CURLOPT_SHARE => static::$handler, //FIXME 这里设置来得及吗？
     ];
 
     /**
-     * @todo 继承遍历接口，以便翻页
-     * @todo 要不要FAILONERROR
+     * @fixme handler还是原来那个吗？var_dump一下试试
      */
     return new class($this, static::$handler, $opts)
       implements \ArrayAccess, \JsonSerializable, \Countable{
@@ -202,7 +192,7 @@ class request implements \ArrayAccess, \Countable{
           CURLOPT_HEADER=>false,
           CURLOPT_ENCODING => '',
           CURLOPT_DEFAULT_PROTOCOL => 'http',
-          CURLOPT_SHARE => $sh,
+          CURLOPT_SHARE => $sh,//FIXME 还是原来那个share吗？
 
           CURLOPT_AUTOREFERER=>true,
           CURLOPT_FOLLOWLOCATION=>true,
@@ -217,8 +207,7 @@ class request implements \ArrayAccess, \Countable{
         curl_exec($handle);
         $errno = curl_errno($handle);
 
-        if($errno !== CURLE_OK)
-          throw new \RuntimeException(curl_strerror($errno),$errno);
+        if($errno !== CURLE_OK) throw new \RuntimeException(curl_strerror($errno),$errno);
 
         static::$private[$id]['info'] = curl_getinfo($handle);
 
@@ -265,8 +254,10 @@ class request implements \ArrayAccess, \Countable{
         return stream_get_contents(static::$private[$id]['body']);
       }
 
-      function __invoke(callable $fn, int ...$code):self{
-        in_array(static::$private[spl_object_id($this)]['info']['http_code'],$code) and $fn("$this",$this->{'Content-Length'});
+      function __invoke(Callable $fn, int ...$code):self{
+        $status = static::$private[spl_object_id($this)]['info']['http_code'];
+        if(empty($code) || in_array($status,$code))
+          $fn("$this",$status);
         return $this;
       }
 
