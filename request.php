@@ -177,6 +177,10 @@ class request implements \ArrayAccess{
         unset($this->$k);
       }
 
+      function __get(string $k):?string{
+        return $this->$k??null;
+      }
+
       function __construct(request $req, $sh, array $opt){
 
         $id = spl_object_id($this);
@@ -227,7 +231,7 @@ class request implements \ArrayAccess{
             $this->$k = $v;
 
 
-        echo '<pre>--',static::$private[$id]['info']['request_header'],'--</pre>';
+        //echo '<pre>--',static::$private[$id]['info']['request_header'],'--</pre>';
         foreach(request::http_response_header(explode("\r\n",static::$private[$id]['info']['request_header'])) as $k=>$v)
           $req->$k = $v;
 
