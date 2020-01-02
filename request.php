@@ -147,16 +147,16 @@ class request implements \ArrayAccess, \Countable{
 
     $opts += [
       CURLOPT_HTTPHEADER => $arr, //FIXME 整段迁移到匿名类构造里，哪种好？
-      //CURLOPT_SHARE => static::$handler, //FIXME 这里设置来得及吗？
+      CURLOPT_SHARE => static::$handler, //FIXME 这里设置来得及吗？
     ];
 
     /**
      * @fixme handler还是原来那个吗？var_dump一下试试
      */
-    return new class($this, static::$handler, $opts)
+    return new class($this, $opts)
       implements \ArrayAccess, \JsonSerializable, \Countable{
 
-      private static $private = [];
+      private $stream;
 
       function offsetExists($k):bool{
         return isset($this->$k);
@@ -179,9 +179,7 @@ class request implements \ArrayAccess, \Countable{
         return count((array)$this);
       }
 
-      function __construct(request $req, $sh, array $opt){
-
-        $id = spl_object_id($this);
+      function __construct(request $req, array $opt){
 
         $handle = curl_init();
 
@@ -192,14 +190,13 @@ class request implements \ArrayAccess, \Countable{
           CURLOPT_HEADER=>false,
           CURLOPT_ENCODING => '',
           CURLOPT_DEFAULT_PROTOCOL => 'http',
-          CURLOPT_SHARE => $sh,//FIXME 还是原来那个share吗？
 
           CURLOPT_AUTOREFERER=>true,
           CURLOPT_FOLLOWLOCATION=>true,
           CURLOPT_FILETIME=>true,
 
           CURLOPT_WRITEHEADER => $tmp_header=fopen('php://temp','r+b'),
-          CURLOPT_FILE => static::$private[$id]['body'] = fopen('php://temp','r+b'),//FIXME r+b 还是w
+          CURLOPT_FILE => $this->stream = fopen('php://temp','r+b'),//FIXME r+b 还是w
           CURLINFO_HEADER_OUT=>true,
           //CURLOPT_SASL_IR => true,
         ]);
@@ -209,7 +206,6 @@ class request implements \ArrayAccess, \Countable{
 
         if($errno !== CURLE_OK) throw new \RuntimeException(curl_strerror($errno),$errno);
 
-        static::$private[$id]['info'] = curl_getinfo($handle);
 
         curl_close($handle);
 
@@ -228,16 +224,14 @@ class request implements \ArrayAccess, \Countable{
             $this->$k = $v;
 
 
-        //echo '<pre>--',static::$private[$id]['info']['request_header'],'--</pre>';
-        foreach(request::http_response_header(explode("\r\n",static::$private[$id]['info']['request_header'])) as $k=>$v)
+        //echo '<pre>--',curl_getinfo($this->stream,CURLINFO_HEADER_OUT),'--</pre>';
+        foreach(request::http_response_header(explode("\r\n",curl_getinfo($this->stream,CURLINFO_HEADER_OUT))) as $k=>$v)
           $req->$k = $v;
 
       }
 
       function __destruct(){
-        $id = spl_object_id($this);
-        fclose(static::$private[$id]['body']);
-        unset(static::$private[$id]);
+        fclose($this->stream);
       }
 
 
@@ -245,17 +239,17 @@ class request implements \ArrayAccess, \Countable{
        * @todo 本想直接转换成har文件，但又无法和浏览器环境一一对应
        */
       function jsonSerialize():array{
-        return static::$private[spl_object_id($this)]['info'];
+        return curl_getinfo($this->stream);
       }
 
       function __toString(){
-        $id = spl_object_id($this);
-        rewind(static::$private[$id]['body']);
-        return stream_get_contents(static::$private[$id]['body']);
+        $id = spl_object_hash($this);
+        rewind($this->stream);
+        return stream_get_contents($this->stream);
       }
 
       function __invoke(Callable $fn, int ...$code):self{
-        $status = static::$private[spl_object_id($this)]['info']['http_code'];
+        $status = curl_getinfo($this->stream,CURLINFO_HTTP_CODE);
         if(empty($code) || in_array($status,$code))
           $fn("$this",$status);
         return $this;
