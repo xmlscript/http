@@ -2,9 +2,8 @@
 
 class request implements \ArrayAccess, \Countable{
 
-  private static $handler = null;
+  private $handler = null;
 
- 
   final function offsetExists($k):bool{
     return isset($this->$k);
   }
@@ -123,12 +122,12 @@ class request implements \ArrayAccess, \Countable{
 
 
   final function __construct(){
-    static::$handler = curl_share_init();
-    curl_share_setopt(static::$handler, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    $this->handler = curl_share_init();
+    curl_share_setopt($this->handler, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
   }
 
   final function __destruct(){
-    curl_share_close(static::$handler);
+    curl_share_close($this->handler);
   }
 
 
@@ -140,23 +139,21 @@ class request implements \ArrayAccess, \Countable{
   final private function response(array $opts=[]):object{//{{{
 
     $arr = [];
-    foreach($this as $k=>$v)
+    foreach((array)$this as $k=>$v)
       if(strcasecmp($k,'Host'))
         $arr[] = "$k: $v";
     //var_dump($arr);
 
     $opts += [
-      CURLOPT_HTTPHEADER => $arr, //FIXME 整段迁移到匿名类构造里，哪种好？
-      CURLOPT_SHARE => static::$handler, //FIXME 这里设置来得及吗？
+      CURLOPT_HTTPHEADER => $arr,
+      CURLOPT_SHARE => $this->handler,
     ];
 
-    /**
-     * @fixme handler还是原来那个吗？var_dump一下试试
-     */
     return new class($this, $opts)
-      implements \ArrayAccess, \JsonSerializable, \Countable{
+      implements \ArrayAccess, \Countable, \JsonSerializable{
 
       private $stream;
+      private $status;
 
       function offsetExists($k):bool{
         return isset($this->$k);
@@ -206,6 +203,8 @@ class request implements \ArrayAccess, \Countable{
 
         if($errno !== CURLE_OK) throw new \RuntimeException(curl_strerror($errno),$errno);
 
+        $this->status = curl_getinfo($this->stream,CURLINFO_HTTP_CODE);
+
 
         curl_close($handle);
 
@@ -249,8 +248,7 @@ class request implements \ArrayAccess, \Countable{
       }
 
       function __invoke(Callable $fn, int ...$code):self{
-        $status = curl_getinfo($this->stream,CURLINFO_HTTP_CODE);
-        if(empty($code) || in_array($status,$code))
+        if(empty($code) || in_array($this->status,$code))
           $fn("$this",$status);
         return $this;
       }
