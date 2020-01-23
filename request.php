@@ -21,6 +21,13 @@ class request implements \ArrayAccess, \Countable{
     return count((array)$this);
   }
 
+  final static function __set_state(array $arr):self{
+    $obj = new self;
+    foreach($arr as $k=>$v)
+      $obj->$k = $v;
+    return $obj;
+  }
+
  //{{{
 
   //CURLOPT_COOKIESESSION => true,
